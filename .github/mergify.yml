@@ -4,6 +4,7 @@ queue_rules:
   - name: default
     conditions: [] # no extra conditions needed to get merged
     checks_timeout: 20m
+    allow_inplace_checks: false
 
 pull_request_rules:
   - name: merge
