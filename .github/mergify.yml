@@ -1,7 +1,97 @@
+# TODO  separate queue for dependabot - needs different commit message processing
+
+queue_rules:
+  - name: default
+    conditions: [] # no extra conditions needed to get merged
+    checks_timeout: 20m
+
 pull_request_rules:
-  - name: Automatic merge on approval
+  - name: merge
     conditions:
-      - "author=ryanking"
+      # this is automatically added, but do it anyway https://docs.mergify.com/conditions/#about-branch-protection
+      - "#approved-reviews-by>=1"
+      - base=master
+      - label=ready-to-merge
+      # work hours from east to west coast
+      - schedule=Mon-Fri 09:00[America/New_York]-17:00[America/Los_Angeles]
     actions:
-      merge:
-        method: squash
+      queue:
+        name: default
+        commit_message_template: |
+          {{title}}
+
+          {{body_raw}}
+
+  - name: label on conflicts
+    conditions:
+      - conflict
+    actions:
+      label:
+        add:
+          - mergify/conflict
+
+  - name: remove conflict label
+    conditions:
+      - -conflict
+    actions:
+      label:
+        remove:
+          - mergify/conflict
+
+  - name: label stale
+    conditions:
+      - base=master
+      - -closed
+      - updated-at<14 days ago
+    actions:
+      dismiss_reviews:
+        approved: true
+      edit:
+        draft: true
+      label:
+        add:
+          - mergify/stale
+      comment:
+        message: |
+          This pull request looks stale. Feel free to reopen it if you think it's a mistake.
+
+  - name: un-label un-stale
+    conditions:
+      - base=master
+      - -closed
+      - label=mergify-stale
+      - updated-at>14 days ago
+    actions:
+      dismiss_reviews:
+        approved: true
+      edit:
+        draft: true
+      label:
+        remove:
+          - mergify/stale
+      comment:
+        message: |
+          This pull request looks stale. Feel free to reopen it if you think it's a mistake.
+
+  - name: close stale pull request
+    conditions:
+      - base=master
+      - -closed
+      - updated-at<28 days ago
+    actions:
+      close:
+        message: |
+          This pull request looks stale. Feel free to reopen it if you think it's a mistake.
+
+  - name: Notify author on queue failure
+    conditions:
+      - "check-failure=Queue: Embarked in merge train"
+    actions:
+      comment:
+        message: >
+          Hey @{{ author }}, this pull request failed to merge and has been
+          dequeued from the merge train.  If you believe your PR failed in
+          the merge train because of a flaky test, requeue it by commenting
+          with `@mergifyio requeue`.
+          More details can be found on the `Queue: Embarked in merge train`
+          check-run.
